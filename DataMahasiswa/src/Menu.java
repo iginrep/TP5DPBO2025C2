@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 
 public class Menu extends JFrame{
@@ -37,6 +38,8 @@ public class Menu extends JFrame{
     // list untuk menampung semua mahasiswa
     private ArrayList<Mahasiswa> listMahasiswa;
 
+    private Database database;
+
     private JPanel mainPanel;
     private JTextField nimField;
     private JTextField namaField;
@@ -59,9 +62,9 @@ public class Menu extends JFrame{
         // inisialisasi listMahasiswa
         listMahasiswa = new ArrayList<>();
 
+        // buat objek database
+        database = new Database();
 
-        // isi listMahasiswa
-        populateList();
 
         // isi tabel mahasiswa
         mahasiswaTable.setModel(setTable());
@@ -138,12 +141,15 @@ public class Menu extends JFrame{
                 nimField.setText(selectedNim);
                 namaField.setText(selectedNama);
                 jenisKelaminComboBox.setSelectedItem(selectedJenisKelamin);
-                for (JRadioButton i : asaldaerah )
-                {
-                    if (i.getText().equals(selectedAsaldaerah)){
-                        i.setSelected(true);
-                        break;
+
+                int index = 0;
+                int flag = 0;
+                while (index < asaldaerah.length && flag == 0) {
+                    if (asaldaerah[index].getText().equals(selectedAsaldaerah)) {
+                        asaldaerah[index].setSelected(true);
+                        flag = 1;
                     }
+                    index++;
                 }
 
                 // ubah button "Add" menjadi "Update"
@@ -164,17 +170,21 @@ public class Menu extends JFrame{
         DefaultTableModel temp = new DefaultTableModel(null, column);
 
         // isi tabel dengan listMahasiswa
-        for (int i = 0; i < listMahasiswa.size(); i++){
-            Object[] row = new Object[5];
-            row[0] = i + 1;
-            row[1] = listMahasiswa.get(i).getNim();
-            row[2] = listMahasiswa.get(i).getNama();
-            row[3] = listMahasiswa.get(i).getJenisKelamin();
-            row[4] = listMahasiswa.get(i).getAsal();
+        try {
+            ResultSet resultSet = database.selectQuery("SELECT * FROM mahasiswa");
+            while (resultSet.next()){
+                Object[] row = new Object[5];
+                row[0] = resultSet.getInt("id");
+                row[1] = resultSet.getString("nim");
+                row[2] = resultSet.getString("nama");
+                row[3] = resultSet.getString("jenis_kelamin");
+                row[4] = resultSet.getString("asal");
 
-            temp.addRow(row);
+                temp.addRow(row);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-
         return temp; // return juga harus diganti
     }
 
@@ -192,8 +202,27 @@ public class Menu extends JFrame{
             }
         }
 
-        // tambahkan data ke dalam list
-        listMahasiswa.add(new Mahasiswa(nim, nama, jenisKelamin, asal));
+        // cek jika ada input yang kosong
+        if (nim.isEmpty() || nama.isEmpty() || jenisKelamin.isEmpty() || asal.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Semua field harus diisi!", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // cek jika NIM sudah ada
+        try {
+            ResultSet resultSet = database.selectQuery("SELECT * FROM mahasiswa WHERE nim = '" + nim + "'");
+            if (resultSet.next()) {
+                JOptionPane.showMessageDialog(null, "NIM sudah ada!", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        // tambahkan data ke dalam database
+        String sql = "INSERT INTO mahasiswa (nim, nama, jenis_kelamin, asal) VALUES ('" + nim + "', '" + nama + "', '" + jenisKelamin + "', '" + asal + "')";
+        database.insertUpdateQuery(sql);
+
 
         // update tabel
         mahasiswaTable.setModel(setTable());
@@ -207,11 +236,12 @@ public class Menu extends JFrame{
     }
 
     public void updateData() {
-        // ambil data dari form
+        // ambil data dari database
         String nim = nimField.getText();
         String nama = namaField.getText();
         String jenisKelamin = jenisKelaminComboBox.getSelectedItem().toString();
         String asal = "";
+
         for (JRadioButton i : asaldaerah)
         {
             if (i.isSelected()){
@@ -219,11 +249,18 @@ public class Menu extends JFrame{
             }
         }
 
-        // ubah data mahasiswa di list
-        listMahasiswa.get(selectedIndex).setNim(nim);
-        listMahasiswa.get(selectedIndex).setNama(nama);
-        listMahasiswa.get(selectedIndex).setJenisKelamin(jenisKelamin);
-        listMahasiswa.get(selectedIndex).setAsal(asal);
+        // cek jika ada input yang kosong
+        if (nim.isEmpty() || nama.isEmpty() || jenisKelamin.isEmpty() || asal.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Semua field harus diisi!", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // ambil id dari baris yang dipilih
+        int id = Integer.parseInt(mahasiswaTable.getModel().getValueAt(selectedIndex, 0).toString());
+
+        // ubah data mahasiswa di database
+        String sql = "UPDATE mahasiswa SET nim = '" + nim + "', nama = '" + nama + "', jenis_kelamin = '" + jenisKelamin + "', asal = '" + asal + "' WHERE id = " + id;
+        database.insertUpdateQuery(sql);
 
         // update tabel
         mahasiswaTable.setModel(setTable());
@@ -237,9 +274,9 @@ public class Menu extends JFrame{
     }
 
     public void deleteData() {
-        // hapus data dari list
-        listMahasiswa.remove(selectedIndex);
-
+        // hapus data dari database
+        String sql = "DELETE FROM mahasiswa WHERE id = " + (selectedIndex + 1);
+        database.insertUpdateQuery(sql);
 
         // update tabel
         mahasiswaTable.setModel(setTable());
@@ -275,26 +312,4 @@ public class Menu extends JFrame{
         selectedIndex = -1;
     }
 
-    private void populateList() {
-        listMahasiswa.add(new Mahasiswa("2203999", "Amelia Zalfa Julianti", "Perempuan", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2202292", "Muhammad Iqbal Fadhilah", "Laki-laki", "Luar Jawa"));
-        listMahasiswa.add(new Mahasiswa("2202346", "Muhammad Rifky Afandi", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2210239", "Muhammad Hanif Abdillah", "Laki-laki", "Luar Jawa"));
-        listMahasiswa.add(new Mahasiswa("2202046", "Nurainun", "Perempuan", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2205101", "Kelvin Julian Putra", "Laki-laki", "Luar Jawa"));
-        listMahasiswa.add(new Mahasiswa("2200163", "Rifanny Lysara Annastasya", "Perempuan", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2202869", "Revana Faliha Salma", "Perempuan", "Luar Jawa"));
-        listMahasiswa.add(new Mahasiswa("2209489", "Rakha Dhifiargo Hariadi", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2203142", "Roshan Syalwan Nurilham", "Laki-laki", "Luar Jawa"));
-        listMahasiswa.add(new Mahasiswa("2200311", "Raden Rahman Ismail", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2200978", "Ratu Syahirah Khairunnisa", "Perempuan", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2204509", "Muhammad Fahreza Fauzan", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2205027", "Muhammad Rizki Revandi", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2203484", "Arya Aydin Margono", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2200481", "Marvel Ravindra Dioputra", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2209889", "Muhammad Fadlul Hafiizh", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2206697", "Rifa Sania", "Perempuan", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2207260", "Imam Chalish Rafidhul Haque", "Laki-laki", "Jawa"));
-        listMahasiswa.add(new Mahasiswa("2204343", "Meiva Labibah Putri", "Perempuan", "Jawa"));
-    }
 }
